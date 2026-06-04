@@ -216,15 +216,22 @@ elif st.session_state.current_page == "Master":
                             d2 = pd.to_datetime(row_hc.iloc[0, idx_doj2], dayfirst=True, errors='coerce') if idx_doj2 is not None else pd.NaT
                             d3 = pd.to_datetime(row_hc.iloc[0, idx_doj3], dayfirst=True, errors='coerce') if idx_doj3 is not None else pd.NaT
 
+                            # --- UPDATED DOJ LOGIC: Fallback to Group Date (d3) if Legal Entity Date (d2) is blank ---
+                            if pd.isna(d2):
+                                d2_final = d3
+                            else:
+                                d2_final = d2
+
                             row_data['Employment Details Date of Joining'] = d1.strftime('%d-%m-%Y') if pd.notna(d1) else ""
-                            row_data['Employment Details Legal Entity Date of Joining'] = d2.strftime('%d-%m-%Y') if pd.notna(d2) else ""
+                            row_data['Employment Details Legal Entity Date of Joining'] = d2_final.strftime('%d-%m-%Y') if pd.notna(d2_final) else ""
                             row_data['Employment Details Group Date of Joining'] = d3.strftime('%d-%m-%Y') if pd.notna(d3) else ""
                             
-                            valid_dates = [d for d in [d1, d2, d3] if pd.notna(d)]
+                            valid_dates = [d for d in [d1, d2_final, d3] if pd.notna(d)]
                             if valid_dates:
                                 d_min_doj = min(valid_dates)
                                 row_data['Min DOJ'] = d_min_doj.strftime('%d-%m-%Y')
                             else:
+                                d_min_doj = pd.NaT
                                 row_data['Min DOJ'] = ""
                             
                             idx_res_hc = lookup_column_index(hc_cols_lower, ['employment', 'details', 'date', 'resignation'])
@@ -236,7 +243,7 @@ elif st.session_state.current_page == "Master":
                             for c in ['First Name', 'Middle Name', 'Last Name', 'Employee Type', 'Reason', 'Entity', 'Position', 'Department', 'Location', 'Employment Details Date of Joining', 'Employment Details Legal Entity Date of Joining', 'Employment Details Group Date of Joining', 'Min DOJ', 'Resignation Date']:
                                 row_data[c] = ""
 
-                        # --- UPDATED LOGIC: FETCH LWD_SF FROM HC REPORT ---
+                        # --- PREVIOUSLY UPDATED LOGIC: FETCH LWD_SF FROM HC REPORT ---
                         if not row_hc.empty:
                             idx_lwd_hc = lookup_column_index(hc_cols_lower, ['employment', 'details', 'actual', 'exit', 'date'])
                             if idx_lwd_hc is None:
