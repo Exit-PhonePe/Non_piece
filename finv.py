@@ -348,10 +348,18 @@ elif st.session_state.current_page == "Master":
                         'NPS', 'Vital claim reimbursement', 'Remarks'
                     ]
 
-                    # Dynamically fill entirely new/unmatched target profiles with raw default placeholders
+                    # --- CRITICAL CONFIGURATION: DEFAULT UNMATCHED/BLANK VALUES TO PROPER RECOVERY PLACES ---
                     for col in final_req_cols:
                         if col not in df_final_master.columns:
-                            df_final_master[col] = ""
+                            # If column is Notice Period recovery, force a hard numeric 0 value instead of a blank text string
+                            if col == 'NP recovery':
+                                df_final_master[col] = 0
+                            else:
+                                df_final_master[col] = ""
+                        else:
+                            # Clean existing data values inside NP Recovery if they were constructed as blanks or NaNs
+                            if col == 'NP recovery':
+                                df_final_master[col] = pd.to_numeric(df_final_master[col], errors='coerce').fillna(0)
 
                     st.session_state.final_master_df = df_final_master[final_req_cols].set_index('Employee ID')
                     st.session_state.absconding_decision = 'pending'
@@ -365,6 +373,7 @@ elif st.session_state.current_page == "Master":
         abs_mask = curr_df[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False)
         total_absconding_cases = abs_mask.sum()
         
+        # This mask will now perfectly isolate rows because blanks/NaNs were securely set to 0
         edit_mask = abs_mask & (pd.to_numeric(curr_df['NP recovery'], errors='coerce').fillna(0) == 0)
         review_cases_data = curr_df[edit_mask]
         
