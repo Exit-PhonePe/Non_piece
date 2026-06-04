@@ -5,26 +5,43 @@ import time
 import re
 import io
 
-# ==========================================
-# 🛠️ FIXED EXCEL COL-WIDTH FORMATTING FUNCTION
-# ==========================================
-def convert_to_styled_excel(df):
+# =========================================================================
+# 🛠️ ENHANCED MULTI-TAB EXCEL COL-WIDTH FORMATTING FUNCTION
+# =========================================================================
+def convert_to_styled_excel(main_df, shortfall_df=None):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Report')
+        # 1. Write the main consolidator report sheet
+        main_df.to_excel(writer, index=False, sheet_name='Report')
         workbook = writer.book
-        worksheet = writer.sheets['Report']
+        worksheet1 = writer.sheets['Report']
+        
         header_format = workbook.add_format({
             'bold': True, 'bg_color': '#5E239D', 'font_color': 'white',
             'border': 1, 'align': 'center', 'valign': 'vcenter'
         })
         cell_format = workbook.add_format({'border': 1})
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(0, col_num, value, header_format)
-            col_series = df[value].fillna("").astype(str).map(str)
+        
+        for col_num, value in enumerate(main_df.columns.values):
+            worksheet1.write(0, col_num, value, header_format)
+            col_series = main_df[value].fillna("").astype(str).map(str)
             max_len = max(col_series.map(len).max(), len(str(value)))
             column_len = max_len + 2
-            worksheet.set_column(col_num, col_num, min(column_len, 50), cell_format)
+            worksheet1.set_column(col_num, col_num, min(column_len, 50), cell_format)
+            
+        # 2. FIX: If an absconding shortfall sub-report exists, write it into a separate tab
+        if shortfall_df is not None and not shortfall_df.empty:
+            df_tab2 = shortfall_df.reset_index()
+            df_tab2.to_excel(writer, index=False, sheet_name='Absconding Shortfall Summary')
+            worksheet2 = writer.sheets['Absconding Shortfall Summary']
+            
+            for col_num, value in enumerate(df_tab2.columns.values):
+                worksheet2.write(0, col_num, value, header_format)
+                col_series = df_tab2[value].fillna("").astype(str).map(str)
+                max_len = max(col_series.map(len).max(), len(str(value)))
+                column_len = max_len + 2
+                worksheet2.set_column(col_num, col_num, min(column_len, 50), cell_format)
+                
     return output.getvalue()
 
 # --- PAGE CONFIGURATION & PREMIUM CSS ---
@@ -48,8 +65,7 @@ st.markdown("""
     .feature-card:hover { box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
     .alert-popup { background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%); border: 2px solid #F43F5E; border-radius: 12px; padding: 25px; margin: 20px 0; text-align: center; animation: pulse-red 2s infinite; }
     @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(244, 63, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); } }
-    </style>
-""", unsafe_allow_html=True)
+    </style> """, unsafe_allow_html=True)
 
 # --- SESSION STATE ---
 if 'current_page' not in st.session_state: st.session_state.current_page = "Master"
@@ -359,10 +375,9 @@ elif st.session_state.current_page == "Master":
                             if col == 'NP recovery':
                                 df_final_master[col] = pd.to_numeric(df_final_master[col], errors='coerce').fillna(0.0)
 
-                    # --- FIX: Only reset state back to 'pending' if the user isn't actively navigating an interactive window state ---
-                    if st.session_state.absconding_decision not in ['review', 'actual_doe_popup', 'done']:
-                        st.session_state.absconding_decision = 'pending'
-
+                    # --- FIXED STATE ROUTING GUARD ---
+                    # Ensure it resets to pending gracefully to capture the alert screen layout rules first
+                    st.session_state.absconding_decision = 'pending'
                     st.session_state.final_master_df = df_final_master[final_req_cols].set_index('Employee ID')
                     st.rerun()
 
@@ -371,13 +386,12 @@ elif st.session_state.current_page == "Master":
         curr_df = st.session_state.final_master_df.reset_index()
         reason_col = 'Reason' if 'Reason' in curr_df.columns else 'Event Reason'
         
-        # Force text normalization and type evaluation explicitly 
+        # Normalize structural strings cleanly
         curr_df[reason_col] = curr_df[reason_col].astype(str).str.strip()
         abs_mask = curr_df[reason_col].str.contains('33|absconding|termination|resignation', case=False, na=False)
         total_absconding_cases = abs_mask.sum()
         
-        # --- FIXED FORCED TYPE MAPPING ---
-        # Instead of strict equality maps, we drop type filtering entirely for review cases to avoid format suppression bugs on his file layout!
+        # Review cases isolated exactly for layout grid matching
         review_cases_data = curr_df[abs_mask]
         
         if total_absconding_cases > 0 and st.session_state.absconding_decision == 'pending':
@@ -462,8 +476,12 @@ elif st.session_state.current_page == "Master":
             st.success("✅ Consolidation Finished Successfully!")
             st.dataframe(final, use_container_width=True)
             
-            if st.session_state.get('np_absconding_df') is not None:
+            # Show secondary shortfall sub-report context if available
+            shortfall_df_ref = st.session_state.get('np_absconding_df')
+            if shortfall_df_ref is not None:
                 st.markdown("### 📊 Calculated Shortfall References")
-                st.dataframe(st.session_state.np_absconding_df.reset_index(), use_container_width=True)
+                st.dataframe(shortfall_df_ref.reset_index(), use_container_width=True)
                 
-            st.download_button("📥 Download Final Master Report", convert_to_styled_excel(final), "Master_FnF_Report.xlsx", use_container_width=True)
+            # --- FIXED EXCEL MULTI-TAB DOWNLOADING MAP ---
+            excel_bytes = convert_to_styled_excel(final, shortfall_df_ref)
+            st.download_button("📥 Download Final Master Report", excel_bytes, "Master_FnF_Report.xlsx", use_container_width=True)
