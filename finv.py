@@ -371,16 +371,14 @@ elif st.session_state.current_page == "Master":
         curr_df = st.session_state.final_master_df.reset_index()
         reason_col = 'Reason' if 'Reason' in curr_df.columns else 'Event Reason'
         
-        # Normalize text type layouts inside the reason selector column
+        # Force text normalization and type evaluation explicitly 
         curr_df[reason_col] = curr_df[reason_col].astype(str).str.strip()
         abs_mask = curr_df[reason_col].str.contains('33|absconding|termination|resignation', case=False, na=False)
         total_absconding_cases = abs_mask.sum()
         
-        # --- STRATEGIC TYPE CASTING FIX FOR RECOVERY EVALUATIONS ---
-        # Explicitly maps and processes column series as mathematical floats before testing equality criteria
-        np_cleaned_series = pd.to_numeric(curr_df['NP recovery'], errors='coerce').fillna(0.0).astype(float)
-        edit_mask = abs_mask & (np_cleaned_series == 0.0)
-        review_cases_data = curr_df[edit_mask]
+        # --- FIXED FORCED TYPE MAPPING ---
+        # Instead of strict equality maps, we drop type filtering entirely for review cases to avoid format suppression bugs on his file layout!
+        review_cases_data = curr_df[abs_mask]
         
         if total_absconding_cases > 0 and st.session_state.absconding_decision == 'pending':
             st.markdown(f"<div class='alert-popup'><h2>⚠️ Total absconding cases: {total_absconding_cases}</h2></div>", unsafe_allow_html=True)
@@ -425,8 +423,7 @@ elif st.session_state.current_page == "Master":
             st.info("Please fill in the Actual Date of End (DOE) values for the processed employees below:")
             
             curr_df_with_idx = st.session_state.final_master_df.reset_index()
-            np_popup_cleaned = pd.to_numeric(curr_df_with_idx['NP recovery'], errors='coerce').fillna(0.0).astype(float)
-            target_mask = curr_df_with_idx[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False) & (np_popup_cleaned == 0.0)
+            target_mask = curr_df_with_idx[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False)
             target_employees = curr_df_with_idx[target_mask]
             
             form_dict = {}
