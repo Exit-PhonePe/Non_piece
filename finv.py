@@ -236,12 +236,17 @@ elif st.session_state.current_page == "Master":
                             for c in ['First Name', 'Middle Name', 'Last Name', 'Employee Type', 'Reason', 'Entity', 'Position', 'Department', 'Location', 'Employment Details Date of Joining', 'Employment Details Legal Entity Date of Joining', 'Employment Details Group Date of Joining', 'Min DOJ', 'Resignation Date']:
                                 row_data[c] = ""
 
-                        if not row_exit.empty:
-                            idx_lwd = lookup_column_index(exit_cols_lower, ['actual', 'exit'])
-                            if idx_lwd is None: idx_lwd = lookup_column_index(exit_cols_lower, ['exit', 'date'])
+                        # --- UPDATED LOGIC: FETCH LWD_SF FROM HC REPORT ---
+                        if not row_hc.empty:
+                            idx_lwd_hc = lookup_column_index(hc_cols_lower, ['employment', 'details', 'actual', 'exit', 'date'])
+                            if idx_lwd_hc is None:
+                                idx_lwd_hc = lookup_column_index(hc_cols_lower, ['actual', 'exit', 'date'])
 
-                            d_lwd_sf = pd.to_datetime(row_exit.iloc[0, idx_lwd], dayfirst=True, errors='coerce') if idx_lwd is not None else pd.NaT
-                            row_data['LWD_SF'] = d_lwd_sf.strftime('%d-%m-%Y') if pd.notna(d_lwd_sf) else ""
+                            if idx_lwd_hc is not None:
+                                d_lwd_sf = pd.to_datetime(row_hc.iloc[0, idx_lwd_hc], dayfirst=True, errors='coerce')
+                                row_data['LWD_SF'] = d_lwd_sf.strftime('%d-%m-%Y') if pd.notna(d_lwd_sf) else ""
+                            else:
+                                row_data['LWD_SF'] = ""
                         else:
                             row_data['LWD_SF'] = ""
 
