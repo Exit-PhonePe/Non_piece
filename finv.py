@@ -352,12 +352,12 @@ elif st.session_state.current_page == "Master":
                     for col in final_req_cols:
                         if col not in df_final_master.columns:
                             if col == 'NP recovery':
-                                df_final_master[col] = 0
+                                df_final_master[col] = 0.0
                             else:
                                 df_final_master[col] = ""
                         else:
                             if col == 'NP recovery':
-                                df_final_master[col] = pd.to_numeric(df_final_master[col], errors='coerce').fillna(0)
+                                df_final_master[col] = pd.to_numeric(df_final_master[col], errors='coerce').fillna(0.0)
 
                     # --- FIX: Only reset state back to 'pending' if the user isn't actively navigating an interactive window state ---
                     if st.session_state.absconding_decision not in ['review', 'actual_doe_popup', 'done']:
@@ -371,10 +371,15 @@ elif st.session_state.current_page == "Master":
         curr_df = st.session_state.final_master_df.reset_index()
         reason_col = 'Reason' if 'Reason' in curr_df.columns else 'Event Reason'
         
-        abs_mask = curr_df[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False)
+        # Normalize text type layouts inside the reason selector column
+        curr_df[reason_col] = curr_df[reason_col].astype(str).str.strip()
+        abs_mask = curr_df[reason_col].str.contains('33|absconding|termination|resignation', case=False, na=False)
         total_absconding_cases = abs_mask.sum()
         
-        edit_mask = abs_mask & (pd.to_numeric(curr_df['NP recovery'], errors='coerce').fillna(0) == 0)
+        # --- STRATEGIC TYPE CASTING FIX FOR RECOVERY EVALUATIONS ---
+        # Explicitly maps and processes column series as mathematical floats before testing equality criteria
+        np_cleaned_series = pd.to_numeric(curr_df['NP recovery'], errors='coerce').fillna(0.0).astype(float)
+        edit_mask = abs_mask & (np_cleaned_series == 0.0)
         review_cases_data = curr_df[edit_mask]
         
         if total_absconding_cases > 0 and st.session_state.absconding_decision == 'pending':
@@ -420,7 +425,8 @@ elif st.session_state.current_page == "Master":
             st.info("Please fill in the Actual Date of End (DOE) values for the processed employees below:")
             
             curr_df_with_idx = st.session_state.final_master_df.reset_index()
-            target_mask = curr_df_with_idx[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False) & (pd.to_numeric(curr_df_with_idx['NP recovery'], errors='coerce').fillna(0) == 0)
+            np_popup_cleaned = pd.to_numeric(curr_df_with_idx['NP recovery'], errors='coerce').fillna(0.0).astype(float)
+            target_mask = curr_df_with_idx[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False) & (np_popup_cleaned == 0.0)
             target_employees = curr_df_with_idx[target_mask]
             
             form_dict = {}
