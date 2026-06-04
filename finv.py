@@ -29,7 +29,7 @@ def convert_to_styled_excel(main_df, shortfall_df=None):
             column_len = max_len + 2
             worksheet1.set_column(col_num, col_num, min(column_len, 50), cell_format)
             
-        # 2. FIX: If an absconding shortfall sub-report exists, write it into a separate tab
+        # 2. If an absconding shortfall sub-report exists, write it into a separate tab
         if shortfall_df is not None and not shortfall_df.empty:
             df_tab2 = shortfall_df.reset_index()
             df_tab2.to_excel(writer, index=False, sheet_name='Absconding Shortfall Summary')
@@ -282,16 +282,34 @@ elif st.session_state.current_page == "Master":
                         else:
                             row_data['Tenure'] = 0.0
 
-                        # Core calculations from FFS report
-                        row_data['NP recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['notice', 'days', 'recovered'])
-                        if row_data['NP recovery'] == 0.0: row_data['NP recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['notice', 'period', 'recover'])
+                        # --- NEW UPDATED ASSIGNMENTS: EXTRACT ALL SPECIFIED COLUMNS DIRECTLY FROM THE EXIT REPORT ---
+                        row_data['NP recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['notice', 'period', 'days', 'recovered'])
+                        if row_data['NP recovery'] == 0.0:
+                            row_data['NP recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['notice', 'days', 'recovered'])
+                        if row_data['NP recovery'] == 0.0:
+                            row_data['NP recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['notice', 'period'])
 
-                        row_data['NP payable'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['payment', 'lieu', 'notice'])
-                        if row_data['NP payable'] == 0.0: row_data['NP payable'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['lieu', 'notice'])
+                        row_data['NP payable'] = parse_numeric_cell(row_exit, exit_cols_lower, ['noticepay', 'days'])
+                        if row_data['NP payable'] == 0.0:
+                            row_data['NP payable'] = parse_numeric_cell(row_exit, exit_cols_lower, ['notice', 'pay'])
 
-                        row_data['Onfield Allowance'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['field', 'allowance', 'payable'])
-                        if row_data['Onfield Allowance'] == 0.0: row_data['Onfield Allowance'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['field', 'allowance'])
+                        row_data['Onfield Allowance'] = parse_numeric_cell(row_exit, exit_cols_lower, ['fieldallowancepayable'])
+                        if row_data['Onfield Allowance'] == 0.0:
+                            row_data['Onfield Allowance'] = parse_numeric_cell(row_exit, exit_cols_lower, ['field', 'allowance'])
 
+                        row_data['Joining Bonus Rec. (SF)'] = parse_numeric_cell(row_exit, exit_cols_lower, ['joiningbonus', 'recoverable'])
+                        if row_data['Joining Bonus Rec. (SF)'] == 0.0:
+                            row_data['Joining Bonus Rec. (SF)'] = parse_numeric_cell(row_exit, exit_cols_lower, ['joining', 'bonus'])
+
+                        row_data['Notice Period Buyout Recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['noticeperiodbuyout', 'recoverable'])
+                        if row_data['Notice Period Buyout Recovery'] == 0.0:
+                            row_data['Notice Period Buyout Recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['buyout'])
+
+                        row_data['Retention bonus recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['retentionbonus', 'recoverable'])
+                        if row_data['Retention bonus recovery'] == 0.0:
+                            row_data['Retention bonus recovery'] = parse_numeric_cell(row_exit, exit_cols_lower, ['retention', 'bonus'])
+
+                        # Remaining metrics stay anchored to FFS Input Report
                         row_data['Mobile Allowance Recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['handset', 'allowance'])
                         if row_data['Mobile Allowance Recovery'] == 0.0: row_data['Mobile Allowance Recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['mobile', 'allowance'])
 
@@ -308,15 +326,6 @@ elif st.session_state.current_page == "Master":
                         row_data['IJP Relocation Hotel Expenses'] = parse_numeric_cell(row_ijp, ijp_cols_lower, ['hotel'])
                         row_data['IJP Relocation conveyance'] = parse_numeric_cell(row_ijp, ijp_cols_lower, ['local', 'conveyance'])
                         if row_data['IJP Relocation conveyance'] == 0.0: row_data['IJP Relocation conveyance'] = parse_numeric_cell(row_ijp, ijp_cols_lower, ['conveyance'])
-
-                        row_data['Joining Bonus Rec. (SF)'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['joining', 'bonus', 'recovery'])
-                        if row_data['Joining Bonus Rec. (SF)'] == 0.0: row_data['Joining Bonus Rec. (SF)'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['joining', 'bonus'])
-
-                        row_data['Notice Period Buyout Recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['notice', 'period', 'buyout'])
-                        if row_data['Notice Period Buyout Recovery'] == 0.0: row_data['Notice Period Buyout Recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['buyout'])
-
-                        row_data['Retention bonus recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['retention', 'bonus', 'recovery'])
-                        if row_data['Retention bonus recovery'] == 0.0: row_data['Retention bonus recovery'] = parse_numeric_cell(row_ffs, ffs_cols_lower, ['retention', 'bonus'])
 
                         idx_itac = lookup_column_index(ffs_cols_lower, ['itac', 'final', 'recovery'])
                         row_data['IT Asset Recovery'] = pd.to_numeric(row_ffs.iloc[0, idx_itac], errors='coerce') if (idx_itac is not None and not row_ffs.empty) else 0.0
@@ -376,7 +385,6 @@ elif st.session_state.current_page == "Master":
                                 df_final_master[col] = pd.to_numeric(df_final_master[col], errors='coerce').fillna(0.0)
 
                     # --- FIXED STATE ROUTING GUARD ---
-                    # Ensure it resets to pending gracefully to capture the alert screen layout rules first
                     st.session_state.absconding_decision = 'pending'
                     st.session_state.final_master_df = df_final_master[final_req_cols].set_index('Employee ID')
                     st.rerun()
@@ -482,6 +490,6 @@ elif st.session_state.current_page == "Master":
                 st.markdown("### 📊 Calculated Shortfall References")
                 st.dataframe(shortfall_df_ref.reset_index(), use_container_width=True)
                 
-            # --- FIXED EXCEL MULTI-TAB DOWNLOADING MAP ---
+            # --- ENHANCED MULTI-TAB EXCEL DOWNLOAD CAPABILITY ---
             excel_bytes = convert_to_styled_excel(final, shortfall_df_ref)
             st.download_button("📥 Download Final Master Report", excel_bytes, "Master_FnF_Report.xlsx", use_container_width=True)
