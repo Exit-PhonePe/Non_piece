@@ -444,4 +444,53 @@ elif st.session_state.current_page == "Master":
             st.markdown("### 📅 Enter Actual DOE Details")
             st.info("Please fill in the Actual Date of End (DOE) values for the processed employees below:")
             
-            curr_
+            curr_df_with_idx = st.session_state.final_master_df.reset_index()
+            target_mask = curr_df_with_idx[reason_col].astype(str).str.contains('33|absconding|termination|resignation', case=False, na=False)
+            target_employees = curr_df_with_idx[target_mask]
+            
+            form_dict = {}
+            for _, row in target_employees.iterrows():
+                emp_id = str(row['Employee ID'])
+                form_dict[emp_id] = st.date_input(f"Employee ID: {emp_id} | Enter Actual DOE", value=None, key=f"doe_in_{emp_id}")
+
+            if st.button("✔️ Save DOE & Finalize Master Report", use_container_width=True):
+                np_rows = []
+                for _, row in target_employees.iterrows():
+                    emp_id = str(row['Employee ID'])
+                    actual_doe_val = form_dict.get(emp_id)
+                    lwd_sf_str = str(row['LWD_SF']).strip()
+                    
+                    actual_doe_dt = pd.to_datetime(actual_doe_val, errors='coerce')
+                    res_doe_dt = pd.to_datetime(lwd_sf_str, dayfirst=True, errors='coerce')
+                    
+                    # --- UPDATED: EXCLUDED INCLUSIVE DAY "+ 1" FROM THE SHORTFALL CALCULATION ---
+                    if pd.notna(actual_doe_dt) and pd.notna(res_doe_dt):
+                        shortfall_days = (actual_doe_dt - res_doe_dt).days
+                    else:
+                        shortfall_days = ""
+
+                    np_rows.append({
+                        'Employee ID': emp_id,
+                        'DOE': lwd_sf_str if lwd_sf_str != "nan" else "",
+                        'DOE as per resignation': actual_doe_dt.strftime('%d-%m-%Y') if pd.notna(actual_doe_dt) else "",
+                        'Shortfall': shortfall_days
+                    })
+                
+                st.session_state.np_absconding_df = pd.DataFrame(np_rows).set_index('Employee ID')
+                st.session_state.absconding_decision = 'done'
+                st.rerun()
+                
+        else:
+            final = st.session_state.final_master_df.reset_index()
+            st.success("✅ Consolidation Finished Successfully!")
+            st.dataframe(final, use_container_width=True)
+            
+            # Show secondary shortfall sub-report context if available
+            shortfall_df_ref = st.session_state.get('np_absconding_df')
+            if shortfall_df_ref is not None:
+                st.markdown("### 📊 Calculated Shortfall References")
+                st.dataframe(shortfall_df_ref.reset_index(), use_container_width=True)
+                
+            # --- ENHANCED MULTI-TAB EXCEL DOWNLOAD CAPABILITY ---
+            excel_bytes = convert_to_styled_excel(final, shortfall_df_ref)
+            st.download_button("📥 Download Final Master Report", excel_bytes, "Master_FnF_Report.xlsx", use_container_width=True)
